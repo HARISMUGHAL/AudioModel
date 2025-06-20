@@ -1,96 +1,124 @@
+
 # 🔊 Spoken Digit Classification API (Flask + TensorFlow)
 
-This project is an **Audio Classification System** that identifies spoken digits (`zero`, `two`, `six`, `eight`, `nine`) using a **Convolutional Neural Network (CNN)** trained on a custom audio dataset. The model is deployed using **Flask** as a REST API.
+This project is an **Audio Classification System** that identifies spoken digits (`zero`, `two`, `six`, `eight`, `nine`) and can also detect **unknown words** using a **CNN model** trained on Mel-spectrograms. The model is served using a **Flask API** for real-time predictions.
 
 ---
 
-## 📁 Dataset
+## 📁 Dataset Structure
 
-- Dataset: Custom spoken digits dataset (downloaded from Kaggle)
-- Folder structure expected:
+```
+counting dataset/
+├── zero/
+├── two/
+├── six/
+├── eight/
+├── nine/
+└── unknown/
+     ├── five.wav
+     ├── stop.wav
+     └── ...
+```
+
+- Each folder must contain `.wav` audio files for its respective class.
+- `unknown/` contains unrelated spoken words like "five", "stop", etc., used to teach the model what is **not** a digit.
+
+---
+
+## 📊 Model Overview
+
+- **Input**: Mel-spectrogram (64 Mel bands, padded to 1 second)
+- **Model**: CNN (Convolutional Neural Network)
+- **Layers**:
+  - 2 × Conv2D → MaxPooling2D → BatchNorm
+  - Flatten → Dense → Dropout → Output logits
+- **Output**: Probabilities for 6 classes (`five digits + unknown`)
+- **Framework**: TensorFlow / Keras
+
+---
+
+## 🧪 Training Details
+
+- **Preprocessing**:
+  - Sample rate: 16,000 Hz
+  - Duration: 1 second (padded/truncated)
+  - Feature: Mel-spectrogram (64 bands)
+- **Label Encoding**:
+  ```python
+  label_names = ['eight', 'nine', 'six', 'two', 'zero', 'unknown']
   ```
-  counting dataset/
-  ├── zero/
-  │   ├── file1.wav
-  │   └── ...
-  ├── two/
-  ├── six/
-  ├── eight/
-  └── nine/
-  ```
+- **Loss**: `SparseCategoricalCrossentropy(from_logits=True)`
+- **Optimizer**: `Adam`
+- **Epochs**: 10
+- **Batch size**: 16
+- **Saved model**: `audio_model4.keras`
 
 ---
 
-## 📊 Model Architecture
+## 🚀 Flask API Endpoints
 
-- Input: Mel-spectrogram of audio (64 Mel bands)
-- Layers:
-  - 2 × Conv2D + MaxPooling2D + BatchNorm
-  - Flatten + Dense + Dropout
-  - Output layer with logits for 5 classes
-- Framework: **TensorFlow / Keras**
+### ✅ `GET /`
 
----
+Returns usage instructions and metadata.
 
-## 🔁 Preprocessing
+### 🎤 `POST /predict`
 
-- Sample Rate: 16,000 Hz
-- Duration: Padded or trimmed to 1 second (16000 samples)
-- Features: **Mel-Spectrogram**
-- Normalization: Per audio waveform
-- Labels: Encoded as integers (0 to 4) corresponding to:
-  - `['eight', 'nine', 'six', 'two', 'zero']`
-
----
-
-## 🧠 Training Details
-
-- Loss: `SparseCategoricalCrossentropy(from_logits=True)`
-- Optimizer: `Adam`
-- Epochs: 10
-- Batch size: 16
-- Model saved as: `audio_model4.keras`
-
----
-
-## 🚀 API Endpoints (Flask)
-
-### 1. `GET /`
-
-Returns welcome message and expected usage.
-
-### 2. `POST /predict`
-
-- Accepts: Audio file (`.wav`, `.mp3`, `.ogg`, `.flac`) via `form-data` (key: `file`)
+- Accepts: `.wav`, `.mp3`, `.ogg`, `.flac` via `form-data` (key = `file`)
 - Returns:
-  - Predicted label
-  - Confidence score
-  - All class probabilities
-- Rejects:
-  - Low confidence predictions (< 0.8 confidence)
+  - `predicted_class`
+  - `confidence` score
+  - `all_predictions` (probability for each class)
+- If confidence is below 0.8, returns:
+  ```json
+  {
+    "error": "Low confidence prediction",
+    "predicted_class": "unknown",
+    "confidence": 0.57
+  }
+  ```
 
-Example Request using `curl`:
+### Example `curl` Request
+
 ```bash
-curl -X POST http://localhost:5000/predict   -F "file=@sample.wav"
+curl -X POST http://localhost:5000/predict   -F "file=@example.wav"
 ```
 
 ---
 
-## 🛠️ Installation & Run Instructions
+## 🧪 Sample API Output
 
-### 🔹 Step 1: Install Python dependencies
+```json
+{
+  "predicted_class": "unknown",
+  "confidence": 0.77,
+  "all_predictions": {
+    "eight": 0.002,
+    "nine": 0.001,
+    "six": 0.003,
+    "two": 0.005,
+    "zero": 0.007,
+    "unknown": 0.982
+  }
+}
+```
+
+---
+
+## 🛠️ Setup Instructions
+
+### 1️⃣ Install Dependencies
 
 ```bash
 pip install tensorflow flask librosa numpy scikit-learn
 ```
 
-### 🔹 Step 2: Train the model (Optional if `audio_model4.keras` already exists)
+### 2️⃣ Train the Model (if not already trained)
 
 ```bash
 python train_model.py
 ```
 
-### 🔹 Step 3: Run the Flask server
+### 3️⃣ Start Flask Server
 
 ```bash
 python app.py
@@ -98,43 +126,28 @@ python app.py
 
 ---
 
-## 🧪 Example Output (JSON)
-
-```json
-{
-  "predicted_class": "six",
-  "confidence": 0.9231,
-  "all_predictions": {
-    "eight": 0.0032,
-    "nine": 0.0151,
-    "six": 0.9231,
-    "two": 0.0340,
-    "zero": 0.0246
-  }
-}
-```
-
----
-
-## 📦 Files in This Project
+## 📦 Files Included
 
 | File | Description |
 |------|-------------|
-| `train_model.py` | Script to load dataset, preprocess audio, and train CNN model |
-| `app.py`         | Flask server for model inference via HTTP |
-| `audio_model4.keras` | Trained Keras model |
-| `counting dataset/` | Dataset with audio files for digits |
+| `train_model.py` | CNN training script |
+| `app.py` | Flask API for prediction |
+| `audio_model_with_unknown.keras` | Saved trained model |
+| `counting dataset/` | Dataset for digits + unknown samples |
+
+---
+
+## ⚠️ Tips & Notes
+
+- **Low Confidence?** If the confidence is below `0.8`, the model treats it as **unknown**.
+- Add **more `unknown` samples** for better detection of out-of-vocabulary audio.
+- You can extend this model to detect more digits or keywords by modifying:
+  - `LABELS` list
+  - Dataset folders
+  - Retrain the model
 
 ---
 
 ## 👨‍💻 Author
 
-Developed as part of an audio ML classification project using TensorFlow and Flask.
-
----
-
-## 📌 Notes
-
-- Ensure the audio file is in the correct format and length.
-- You can add more classes and retrain the model easily.
-- Dataset quality highly influences model accuracy.
+Developed as part of a Deep Learning project for real-time spoken word classification using TensorFlow and Flask.
