@@ -7,13 +7,15 @@ import librosa
 app = Flask(__name__)
 
 # Configuration
-label_names = ['eigth', 'nine', 'six', 'two', 'zero']
-model = tf.keras.models.load_model("audio_model4.keras")
-CONFIDENCE_THRESHOLD = 0.8
+label_names = ['eight', 'nine', 'six', 'two', 'zero', 'unknown']
+model = tf.keras.models.load_model("audio_model_with_unknown.keras")
+CONFIDENCE_THRESHOLD = 0.75
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'ogg', 'flac'}
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def preprocess_audio(waveform, target_length=16000):
     waveform = librosa.util.normalize(waveform)
@@ -23,6 +25,7 @@ def preprocess_audio(waveform, target_length=16000):
         waveform = np.pad(waveform, (0, target_length - len(waveform)), 'constant')
     return waveform
 
+
 def get_mel_spectrogram(waveform, sr=16000, n_mels=64):
     mel = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=n_mels)
     mel_db = librosa.power_to_db(mel, ref=np.max)
@@ -30,14 +33,16 @@ def get_mel_spectrogram(waveform, sr=16000, n_mels=64):
     mel_db = mel_db[..., tf.newaxis]  # (n_mels, time) → (n_mels, time, 1)
     return mel_db
 
+
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({
         "message": "Welcome to the Audio Classification API",
-        "usage": "Send a POST request to /predict with an audio file in form-data (key = file)",
+        "usage": "POST to /predict with audio file in 'file' key",
         "expected_classes": label_names,
         "confidence_threshold": CONFIDENCE_THRESHOLD
     })
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -65,22 +70,23 @@ def predict():
 
         predicted_index = int(np.argmax(probabilities))
         confidence = float(probabilities[predicted_index])
+        predicted_label = label_names[predicted_index]
 
-        if confidence < CONFIDENCE_THRESHOLD:
+        if predicted_label == 'unknown' or confidence < CONFIDENCE_THRESHOLD:
             return jsonify({
-                "error": "Low confidence prediction",
-                "predicted_class": label_names[predicted_index],
+                "predicted_class": "unknown",
                 "confidence": confidence
-            }), 400
+            }), 200
 
         return jsonify({
-            "predicted_class": label_names[predicted_index],
+            "predicted_class": predicted_label,
             "confidence": confidence,
             "all_predictions": {label: float(prob) for label, prob in zip(label_names, probabilities)}
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
